@@ -50,8 +50,16 @@ func Create(dir string) (Maildir, error) {
 	return m, nil
 }
 
+func (d Maildir) DeliverNew(m *mail.Message) (Key, error) {
+	return d.deliver(m, nw)
+}
+
+func (d Maildir) DeliverCur(m *mail.Message) (Key, error) {
+	return d.deliver(m, cur)
+}
+
 // Deliver delivers the Message to the "new" maildir.
-func (d Maildir) Deliver(m *mail.Message) (Key, error) {
+func (d Maildir) deliver(m *mail.Message, t string) (Key, error) {
 	k := strconv.FormatInt(time.Now().Unix(), 10) + "."
 	k += strconv.FormatInt(int64(pid), 10) + "_" + strconv.FormatUint(atomic.AddUint64(&cntr, 1), 10)
 	k += "." + hostname
@@ -74,7 +82,7 @@ func (d Maildir) Deliver(m *mail.Message) (Key, error) {
 	if _, err := io.Copy(f, m.Body); err != nil {
 		return key, err
 	}
-	return key, os.Rename(path.Join(d.dir, tmp, k), path.Join(d.dir, nw, k))
+	return key, os.Rename(path.Join(d.dir, tmp, k), path.Join(d.dir, t, k))
 }
 
 // GetFile gets the file path for the specified key.

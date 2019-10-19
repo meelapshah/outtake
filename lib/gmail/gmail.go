@@ -47,6 +47,7 @@ import (
 const (
 	// What X- header to use for storing labels.
 	labelsHeader = "X-Keywords"
+	sentLabel = "SENT"
 	// Cache filename.
 	cacheFile = ".outtake"
 )
@@ -144,6 +145,15 @@ func (g *Gmail) getMaildirMessage(k maildir.Key) (*mail.Message, io.ReadCloser, 
 	return m, f, err
 }
 
+func (g *Gmail) deliverMessage(m *mail.Message) (maildir.Key, error) {
+	labels := m.Header[labelsHeader]
+	if lib.Contains(labels, sentLabel) || !lib.Contains(labels, unreadLabel) {
+		return g.dir.DeliverCur(m)
+	} else {
+		return g.dir.DeliverNew(m)
+	}
+}
+
 func (g *Gmail) getBody(m string) (*mail.Message, error) {
 	body, err := g.svc.GetRawMessage(m)
 	if err != nil {
@@ -173,7 +183,7 @@ func (g *Gmail) getMetaData(m *msgOp) error {
 }
 
 func (g *Gmail) writeAdd(m msgOp) error {
-	k, err := g.dir.Deliver(m.Msg)
+	k, err := g.deliverMessage(m.msg)
 	if err != nil {
 		return err
 	}
@@ -251,8 +261,7 @@ func (g *Gmail) writeLabels(id string, labels []string) error {
 	}
 	defer c.Close()
 	msg.Header[labelsHeader] = labels
-	// Note that this will mark a message as "new" for any clients. This might be undesirable if only labels have changed?
-	kn, err := g.dir.Deliver(msg)
+	kn, err := g.deliverMessage(msg)
 	if err != nil {
 		return err
 	}
