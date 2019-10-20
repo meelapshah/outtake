@@ -30,14 +30,17 @@ import (
 	"log"
 	"net/mail"
 	"os"
+	"os/exec"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/danmarg/outtake/lib"
 	"github.com/danmarg/outtake/lib/maildir"
 	"github.com/danmarg/outtake/lib/oauth"
+	nm "github.com/zenhack/go.notmuch"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	gmail "google.golang.org/api/gmail/v1"
@@ -47,9 +50,18 @@ import (
 const (
 	// What X- header to use for storing labels.
 	labelsHeader = "X-Keywords"
-	sentLabel = "SENT"
 	// Cache filename.
 	cacheFile = ".outtake"
+
+	// gmail labels
+	sentLabel    = "SENT"
+	unreadLabel  = "UNREAD"
+	flaggedLabel = "STARRED"
+
+	// notmuch tags
+	sentTag    = "sent"
+	unreadTag  = "unread"
+	flaggedTag = "flagged"
 )
 
 var (
@@ -188,7 +200,7 @@ func (g *Gmail) getMetaData(m *msgOp) error {
 }
 
 func (g *Gmail) writeAdd(m msgOp) error {
-	k, err := g.deliverMessage(m.msg)
+	k, err := g.deliverMessage(m.Msg)
 	if err != nil {
 		return err
 	}
@@ -603,4 +615,142 @@ func (g *Gmail) Sync(full bool, progress chan<- lib.Progress) error {
 		return nil
 	}
 	return g.full()
+}
+
+func getMessageId(m *mail.Message) (string, bool) {
+	mIds := m.Header["Message-Id"]
+	if len(mIds) != 1 {
+		log.Println("Expected message to contain exactly 1 Message-Id header, got", mIds, "for", m)
+		return "", false
+	}
+	mId := strings.Trim(mIds[0], "<>")
+	if len(mId) == 0 {
+		log.Println("Couldn't parse a valid Mesage-Id", mIds)
+		return "", false
+	}
+	return mId, true
+}
+
+func (g *Gmail) getMessageIdForGmailId(gId string) (string, bool) {
+	key, ok := g.cache.GetMsgKey(gId)
+	if !ok {
+		log.Println("Couldn't get maildir key for", gId)
+		return "", false
+	}
+	m, c, err := g.getMaildirMessage(key)
+	if err != nil {
+		log.Println("Couldn't read maildir message for key", key, err.Error())
+		return "", false
+	}
+	defer c.Close()
+	return getMessageId(m)
+}
+
+func (g *Gmail) SyncNotmuch() error {
+	log.Println("Running notmuch new")
+	if err := exec.Command("notmuch", "new").Run(); err != nil {
+		log.Println("Error running notmuch new:", err.Error())
+		return err
+	}
+
+	log.Println("Syncing notmuch tags and gmail labels")
+	notmuch, err := nm.Open(g.dir.GetDir(), nm.DBReadWrite)
+	if err != nil {
+		return err
+	}
+	defer notmuch.Close()
+
+	notmuchTagToMessageIds := make(map[string]map[string]struct{})
+	for _, tag := range notmuchTags {
+		notmuchTagToMessageIds[tag] = make(map[string]struct{})
+	}
+	log.Println("Scanning all messages for notmuch tags:", notmuchTags)
+	for _, tag := range notmuchTags {
+		messages, err := notmuch.NewQuery("tag:" + tag).Messages()
+		if err != nil {
+			return err
+		}
+		var message *nm.Message
+		for messages.Next(&message) {
+			notmuchTagToMessageIds[tag][message.ID()] = struct{}{}
+		}
+	}
+
+	// messages with gmail sent label should get notmuch set tag
+	log.Println("Syncing gmail sent label to notmuch sent tag")
+	gmailIdSentChan := make(chan string)
+	g.cache.GmailIdsForLabel(sentLabel, gmailIdSentChan)
+	for gId := range gmailIdSentChan {
+		mId, ok := g.cache.GetMessageIdForGmailId(gId)
+		if !ok {
+			log.Println("Couldn't get message id for gmail id", gId)
+			continue
+		}
+		if _, ok := notmuchTagToMessageIds[sentTag][mId]; ok {
+			continue
+		}
+		message, err := notmuch.FindMessage(mId)
+		if err != nil {
+			log.Println("Notmuch couldn't find message", mId, "(", err.Error(), ")")
+			continue
+		}
+		err = message.AddTag(sentTag)
+		if err != nil {
+			log.Println("Couldn't add sent tag to message with id", mId, "(", err.Error(), ")")
+			continue
+		}
+		log.Println("Added sent tag to ", mId)
+	}
+
+	// messages without notmuch unreadTag should have gmail unreadLabel removed
+	log.Println("Syncing notmuch unread tag to gmail unread label")
+	var messagesToRemoveUnreadLabel []string
+	gmailIdUnreadChan := make(chan string)
+	g.cache.GmailIdsForLabel(unreadLabel, gmailIdUnreadChan)
+	for gId := range gmailIdUnreadChan {
+		mId, ok := g.cache.GetMessageIdForGmailId(gId)
+		if !ok {
+			log.Println("Couldn't get message id for gmail id", gId)
+			continue
+		}
+		if _, ok := notmuchTagToMessageIds[unreadTag][mId]; ok {
+			continue
+		}
+		messagesToRemoveUnreadLabel = append(messagesToRemoveUnreadLabel, gId)
+	}
+
+	// message with notmuch flaggedTag should have gmail flaggedLabel added
+	log.Println("Syncing notmuch flagged tag to gmail flagged label")
+	var messagesToAddFlaggedLabel []string
+	for mId := range notmuchTagToMessageIds[flaggedTag] {
+		gId, ok := g.cache.GetGmailIdForMessageId(mId)
+		if !ok {
+			log.Println("Couldn't get gmail id for message id", mId)
+			continue
+		}
+		if g.cache.HasGmailLabel(flaggedLabel, gId) {
+			continue
+		}
+		messagesToAddFlaggedLabel = append(messagesToAddFlaggedLabel, gId)
+	}
+
+	if len(messagesToRemoveUnreadLabel) > 0 {
+		// TODO: gmail api limits to 1000 message ids per call
+		if err := g.svc.ModifyLabels(messagesToRemoveUnreadLabel, []string{}, []string{unreadLabel}); err != nil {
+			log.Println("Error removing unread label for messages:", err.Error())
+		} else {
+			log.Println("Removed unread label from", len(messagesToRemoveUnreadLabel), "messages")
+		}
+	}
+
+	if len(messagesToAddFlaggedLabel) > 0 {
+		// TODO: gmail api limits to 1000 message ids per call
+		if err := g.svc.ModifyLabels(messagesToAddFlaggedLabel, []string{flaggedLabel}, []string{}); err != nil {
+			log.Println("Error adding flagged label for messages:", err.Error())
+		} else {
+			log.Println("Added flagged label to", len(messagesToAddFlaggedLabel), "messages")
+		}
+	}
+
+	return nil
 }
