@@ -50,6 +50,10 @@ func Create(dir string) (Maildir, error) {
 	return m, nil
 }
 
+func (d Maildir) GetDir() string {
+	return d.dir
+}
+
 func (d Maildir) DeliverNew(m *mail.Message) (Key, error) {
 	return d.deliver(m, nw)
 }
