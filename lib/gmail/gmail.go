@@ -85,7 +85,7 @@ func NewGmail(dir string, label string) (*Gmail, error) {
 	cfg := &oauth2.Config{
 		ClientID:     oauth.ClientId,
 		ClientSecret: oauth.Secret,
-		Scopes:       []string{gmail.GmailReadonlyScope},
+		Scopes:       []string{gmail.MailGoogleComScope},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
 			TokenURL: "https://accounts.google.com/o/oauth2/token",

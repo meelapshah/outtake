@@ -16,9 +16,9 @@ import (
 
 const (
 	// Oauth client ID.
-	ClientId = "457311175792-n3hpckfadgri6opat70c8an1fmhmaev7.apps.googleusercontent.com"
+	ClientId = "324161558957-fnbfpm45dgiare5htt7nc8t52a5e1v2k.apps.googleusercontent.com"
 	// Oauth client secret.
-	Secret = "GOylH6-BUUQFm_lzrhXKpdac"
+	Secret = "u02Pz9c3cSR1Aii_3qzuAxXX"
 )
 
 func GetOAuthClient(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error) {
