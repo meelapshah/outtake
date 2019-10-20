@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/danmarg/outtake/lib"
 	"github.com/danmarg/outtake/lib/gmail"
 	"github.com/urfave/cli"
-	"os"
-	"time"
 )
 
 const (
@@ -62,12 +63,12 @@ func main() {
 			return
 		}
 		g, err := gmail.NewGmail(d, ctx.String("label"))
-		gmail.MessageBufferSize = ctx.Int("buffer")
-		gmail.ConcurrentDownloads = ctx.Int("parallel")
 		if err != nil {
 			fmt.Println("Error: ", err)
 			return
 		}
+		gmail.MessageBufferSize = ctx.Int("buffer")
+		gmail.ConcurrentDownloads = ctx.Int("parallel")
 		progress := make(chan lib.Progress)
 		go func() {
 			l := time.Time{}
@@ -80,8 +81,9 @@ func main() {
 			fmt.Println()
 		}()
 		if err := g.Sync(ctx.Bool("full"), progress); err != nil {
-			fmt.Println(err)
-			os.Exit(-1)
+			panic(err)
+		} else if err := g.SyncNotmuch(); err != nil {
+			panic(err)
 		}
 
 	}
