@@ -1,10 +1,11 @@
 package gmail
 
 import (
+	"time"
+
 	"github.com/danmarg/outtake/lib"
 	gmail "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
-	"time"
 )
 
 const (
@@ -19,6 +20,7 @@ type gmailService interface {
 	GetLabels() (*gmail.ListLabelsResponse, error)
 	GetHistory(historyIndex uint64, label, page string) (*gmail.ListHistoryResponse, error)
 	GetMessages(q, page string) (*gmail.ListMessagesResponse, error)
+	ModifyLabels(msgIds []string, addLabels []string, delLabels []string) error
 }
 
 type backoff struct {
@@ -106,4 +108,17 @@ func (s *restGmailService) GetMessages(labelId, page string) (*gmail.ListMessage
 		return isRateLimited(err)
 	})
 	return r, err
+}
+
+func (s *restGmailService) ModifyLabels(msgIds []string, addLabels []string, removeLabels []string) error {
+	var err error
+	err = s.limiter.DoWithBackoff(func() (error, bool) {
+		err = s.svc.Messages.BatchModify("me", &gmail.BatchModifyMessagesRequest{
+			AddLabelIds:    addLabels,
+			Ids:            msgIds,
+			RemoveLabelIds: removeLabels,
+		}).Do()
+		return isRateLimited(err)
+	})
+	return err
 }
