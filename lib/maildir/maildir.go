@@ -86,7 +86,13 @@ func (d Maildir) deliver(m *mail.Message, t string) (Key, error) {
 	if _, err := io.Copy(f, m.Body); err != nil {
 		return key, err
 	}
-	return key, os.Rename(path.Join(d.dir, tmp, k), path.Join(d.dir, t, k))
+
+	targetPath := path.Join(d.dir, t, k)
+	if t == cur {
+		// Add the maildir seen flag to messages delivered to the cur folder
+		targetPath += ":2,S"
+	}
+	return key, os.Rename(path.Join(d.dir, tmp, k), targetPath)
 }
 
 // GetFile gets the file path for the specified key.
