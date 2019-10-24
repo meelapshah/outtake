@@ -53,6 +53,11 @@ const (
 )
 
 var (
+	gmailLabels = [...]string{unreadLabel, flaggedLabel, sentLabel}
+	notmuchTags = [...]string{unreadTag, flaggedTag, sentTag}
+)
+
+var (
 	// Errors.
 	unknownMessage   = errors.New("unknown message")
 	fullSyncRequired = errors.New("full sync required")
@@ -190,6 +195,16 @@ func (g *Gmail) writeAdd(m msgOp) error {
 	// Update the cache.
 	g.cache.SetMsgLabels(m.Id, m.Labels)
 	g.cache.SetMsgKey(m.Id, k)
+	if mId, ok := getMessageId(m.Msg); ok {
+		g.cache.SetIds(m.Id, mId)
+	}
+	for _, lbl := range gmailLabels {
+		if lib.Contains(m.Labels, lbl) {
+			g.cache.SetGmailLabel(lbl, m.Id)
+		} else if !lib.Contains(m.Labels, lbl) {
+			g.cache.DelGmailLabel(lbl, m.Id)
+		}
+	}
 	return nil
 }
 
@@ -203,10 +218,21 @@ func (g *Gmail) writeDel(id string) error {
 		return err
 	}
 	g.cache.DelMsg(id)
+	for _, lbl := range gmailLabels {
+		g.cache.DelGmailLabel(lbl, id)
+	}
 	return nil
 }
 
 func (g *Gmail) computeLabels(id string, added, removed []string) []string {
+	for _, lbl := range gmailLabels {
+		if lib.Contains(added, lbl) {
+			g.cache.SetGmailLabel(lbl, id)
+		} else if lib.Contains(removed, lbl) {
+			g.cache.DelGmailLabel(lbl, id)
+		}
+	}
+
 	if old, ok := g.cache.GetMsgLabels(id); ok {
 		nlabels := make(map[string]struct{})
 		for _, l := range old {
@@ -220,7 +246,7 @@ func (g *Gmail) computeLabels(id string, added, removed []string) []string {
 		}
 		labels := make([]string, len(nlabels))
 		i := 0
-		for l, _ := range nlabels {
+		for l := range nlabels {
 			labels[i] = l
 			i++
 		}

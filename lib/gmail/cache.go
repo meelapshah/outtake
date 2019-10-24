@@ -12,14 +12,53 @@ import (
 
 const (
 	// Cache key prefixes.
-	midToKey     = "mid_to_key"
-	midToLabels  = "mid_to_label"
-	historyIndex = "history_index"
-	oauthToken   = "oauth_token"
+	midToKey         = "mid_to_key"
+	midToLabels      = "mid_to_label"
+	historyIndex     = "history_index"
+	oauthToken       = "oauth_token"
+	gidToMid         = "gid_to_mid"
+	midToGid         = "mid_to_gid"
+	labelToGidPrefix = "label_to_gid_"
 )
 
 type gmailCache struct {
 	Cache lib.Cache
+}
+
+func (c *gmailCache) GetMessageIdForGmailId(gId string) (string, bool) {
+	if bs, ok := c.Cache.Get(gidToMid, gId); ok {
+		return string(bs), true
+	}
+	return "", false
+}
+
+func (c *gmailCache) GetGmailIdForMessageId(mId string) (string, bool) {
+	if bs, ok := c.Cache.Get(midToGid, mId); ok {
+		return string(bs), true
+	}
+	return "", false
+}
+
+func (c *gmailCache) SetIds(gId, mId string) {
+	c.Cache.Set(gidToMid, gId, []byte(mId))
+	c.Cache.Set(midToGid, mId, []byte(gId))
+}
+
+func (c *gmailCache) SetGmailLabel(label, gId string) {
+	c.Cache.Set(labelToGidPrefix+label, gId, []byte{})
+}
+
+func (c *gmailCache) HasGmailLabel(label, gId string) bool {
+	_, ok := c.Cache.Get(labelToGidPrefix+label, gId)
+	return ok
+}
+
+func (c *gmailCache) DelGmailLabel(label, gId string) {
+	c.Cache.Del(labelToGidPrefix+label, gId)
+}
+
+func (c *gmailCache) GmailIdsForLabel(label string, gIdChan chan string) {
+	c.Cache.Items(labelToGidPrefix+label, gIdChan)
 }
 
 func (c *gmailCache) GetOauthToken() (*oauth2.Token, bool) {
@@ -57,6 +96,11 @@ func (g *gmailCache) GetMsgs(ms chan<- string) {
 func (c *gmailCache) DelMsg(m string) {
 	c.Cache.Del(midToKey, m)
 	c.Cache.Del(midToLabels, m)
+	mId, ok := c.GetMessageIdForGmailId(m)
+	if ok {
+		c.Cache.Del(midToGid, mId)
+	}
+	c.Cache.Del(gidToMid, m)
 }
 
 func (c *gmailCache) GetMsgLabels(m string) ([]string, bool) {
