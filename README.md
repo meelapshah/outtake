@@ -9,6 +9,6 @@ Syncing can also be limited to a specific label.
 # usage
 
 ```
-go get github.com/danmarg/outtake
+go get github.com/meelapshah/outtake
 ./outtake --directory ~/Mail
 ```

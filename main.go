@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/danmarg/outtake/lib"
-	"github.com/danmarg/outtake/lib/gmail"
+	"github.com/meelapshah/outtake/lib"
+	"github.com/meelapshah/outtake/lib/gmail"
 	"github.com/urfave/cli"
 )
 

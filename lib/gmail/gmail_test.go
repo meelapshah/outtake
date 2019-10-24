@@ -3,8 +3,8 @@ package gmail
 import (
 	"encoding/base64"
 	"errors"
-	"github.com/danmarg/outtake/lib"
-	"github.com/danmarg/outtake/lib/maildir"
+	"github.com/meelapshah/outtake/lib"
+	"github.com/meelapshah/outtake/lib/maildir"
 	gmail "google.golang.org/api/gmail/v1"
 	"io/ioutil"
 	"os"

@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 
-	"github.com/danmarg/outtake/lib"
-	"github.com/danmarg/outtake/lib/maildir"
+	"github.com/meelapshah/outtake/lib"
+	"github.com/meelapshah/outtake/lib/maildir"
 	"golang.org/x/oauth2"
 )
 

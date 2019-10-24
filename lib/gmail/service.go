@@ -3,7 +3,7 @@ package gmail
 import (
 	"time"
 
-	"github.com/danmarg/outtake/lib"
+	"github.com/meelapshah/outtake/lib"
 	gmail "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
 )

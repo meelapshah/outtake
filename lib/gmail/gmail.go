@@ -37,9 +37,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/danmarg/outtake/lib"
-	"github.com/danmarg/outtake/lib/maildir"
-	"github.com/danmarg/outtake/lib/oauth"
+	"github.com/meelapshah/outtake/lib"
+	"github.com/meelapshah/outtake/lib/maildir"
+	"github.com/meelapshah/outtake/lib/oauth"
 	nm "github.com/zenhack/go.notmuch"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
